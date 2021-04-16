@@ -13,9 +13,19 @@ WORKDIR $application_directory
 RUN apt-get update --fix-missing && apt-get -y upgrade
 
 RUN apt-get update \
-    && apt-get install -y gnupg2 g++ wget \
+    && apt-get install -y gnupg2 g++ nginx sudo wget \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /src/*.deb
+
+RUN wget -q -O ./websocat.deb https://github.com/vi/websocat/releases/download/v1.7.0/websocat_1.7.0_ssl1.1_amd64.deb \
+    && apt install ./websocat.deb \
+    && rm ./websocat.deb
+
+# Configure nginx as a reverse proxy.
+# This is to serve requests via one port instead of two.
+COPY chroxy.conf /etc/nginx/sites-available/chroxy.conf
+RUN unlink /etc/nginx/sites-enabled/default \
+    && ln -s /etc/nginx/sites-available/chroxy.conf /etc/nginx/sites-enabled/chroxy.conf
 
 # Install latest chrome dev package.
 RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
@@ -31,6 +41,10 @@ RUN groupadd --system chrome && \
     mkdir --parents /home/chrome/reports && \
     chown --recursive chrome:chrome /home/chrome && \
     chown --recursive chrome:chrome $application_directory
+
+# Add a chrome user as a sudoer
+RUN adduser chrome sudo \
+    && echo "chrome ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Run everything after as non-privileged user.
 USER chrome
@@ -55,4 +69,4 @@ RUN mix do deps.loadpaths --no-deps-check
 EXPOSE 4000
 ENV PORT=4000
 
-CMD ["mix", "run", "--no-halt"]
+CMD ["./init.sh"]
